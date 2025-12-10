@@ -16,11 +16,11 @@ pip install torch torchvision numpy pillow opencv-python scikit-learn matplotlib
 
 ## Usage
 
-**Required files:** `train_googlenet_final.py`, `poc_dataset.py`, `POC_Dataset/`
+**Required files:** `train_googlenet.py`, `poc_dataset.py`, `POC_Dataset/`
 
 ```bash
 # Training
-python train_googlenet_final.py
+python train_googlenet.py
 
 # Inference
 python inference.py
