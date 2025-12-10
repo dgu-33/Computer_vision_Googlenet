@@ -8,6 +8,7 @@ import torchvision.models as models
 from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.metrics import classification_report, accuracy_score
 from poc_dataset import get_data_transforms
 
 
@@ -68,50 +69,21 @@ class POCPredictor:
             probs[0].cpu().numpy()
         )
 
-    def visualize_prediction(self, image_path, save_path=None):
-        """Visualize prediction with probability bar chart."""
-        predicted_class, confidence, all_probs = self.predict_single_image(image_path)
-        image = Image.open(image_path)
-
-        fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-
-        axes[0].imshow(image)
-        axes[0].axis('off')
-        axes[0].set_title(
-            f'Predicted: {predicted_class}\nConfidence: {confidence:.2%}',
-            fontsize=14, fontweight='bold'
-        )
-
-        colors = [
-            'green' if i == np.argmax(all_probs) else 'skyblue'
-            for i in range(len(self.class_names))
-        ]
-        axes[1].barh(self.class_names, all_probs, color=colors)
-        axes[1].set_xlim([0, 1])
-        axes[1].set_xlabel('Probability')
-        axes[1].set_title('Class Probabilities', fontsize=14)
-
-        for i, (prob, _) in enumerate(zip(all_probs, self.class_names)):
-            axes[1].text(prob + 0.01, i, f'{prob:.2%}', va='center')
-
-        plt.tight_layout()
-
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Saved visualization to {save_path}")
-
-        plt.show()
-        return predicted_class, confidence
-
-    def predict_batch(self, image_folder):
-        """Run inference on all images in a folder."""
+    def predict_batch(self, image_folder, true_label):
+        """
+        Run inference on all images in a folder and collect predictions.
+        true_label: integer index of the ground truth class
+        """
         image_files = [
             f for f in os.listdir(image_folder)
             if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))
         ]
 
         results = []
-        print(f"Found {len(image_files)} images in {image_folder}")
+        y_true = []
+        y_pred = []
+
+        print(f"\nFound {len(image_files)} images in {image_folder}")
 
         for img_file in image_files:
             img_path = os.path.join(image_folder, img_file)
@@ -128,40 +100,56 @@ class POCPredictor:
 
             print(f"{img_file}: {pred_class} ({conf:.2%})")
 
-        return results
+            # Metrics 계산용
+            y_true.append(true_label)
+            y_pred.append(self.class_names.index(pred_class))
+
+        return results, y_true, y_pred
 
 
 def main():
     MODEL_PATH = "models/best_googlenet_poc.pth"
-    TEST_IMAGE = "POC_Dataset/Testing/Chorionic_villi/test_image.jpg"
-    TEST_FOLDER = "POC_Dataset/Testing/Chorionic_villi"
+    BASE_TEST_DIR = "POC_Dataset/Testing"
 
     predictor = POCPredictor(model_path=MODEL_PATH)
 
-    if os.path.exists(TEST_IMAGE):
-        print("\n" + "="*50)
-        print("Single Image Prediction")
-        print("="*50 + "\n")
+    all_true = []
+    all_pred = []
 
-        pred_class, conf = predictor.visualize_prediction(
-            TEST_IMAGE,
-            save_path="prediction_result.png"
+    print("\n===============================================")
+    print("Batch Prediction for All Classes")
+    print("===============================================\n")
+
+    # iterate each folder
+    for class_idx, class_name in enumerate(predictor.class_names):
+        test_folder = os.path.join(BASE_TEST_DIR, class_name)
+
+        if not os.path.exists(test_folder):
+            print(f"❌ Folder not found: {test_folder}")
+            continue
+
+        print(f"\n--- Predicting folder: {class_name} ---\n")
+
+        results, y_true, y_pred = predictor.predict_batch(
+            test_folder,
+            true_label=class_idx
         )
-        print(f"\nPrediction: {pred_class}")
-        print(f"Confidence: {conf:.2%}")
 
-    if os.path.exists(TEST_FOLDER):
-        print("\n" + "="*50)
-        print("Batch Prediction")
-        print("="*50 + "\n")
+        all_true.extend(y_true)
+        all_pred.extend(y_pred)
 
-        results = predictor.predict_batch(TEST_FOLDER)
+    print("\n===============================================")
+    print("Classification Report")
+    print("===============================================\n")
 
-        print("\n" + "="*50)
-        print("Summary")
-        print("="*50)
-        print(f"Total images: {len(results)}")
-        print(f"Avg confidence: {np.mean([r['confidence'] for r in results]):.2%}")
+    print(classification_report(
+        all_true, 
+        all_pred, 
+        target_names=predictor.class_names,
+        digits=4
+    ))
+
+    print("\nOverall Accuracy:", accuracy_score(all_true, all_pred))
 
 
 if __name__ == "__main__":
